@@ -2,21 +2,26 @@ import { useState, useEffect } from 'react'
 import { Cube3D } from './components/cube/Cube3D'
 import { CayleyGraph } from './components/graph/CayleyGraph'
 import { ControlsPanel } from './components/controls/ControlsPanel'
+import { PlaybackBar } from './components/controls/PlaybackBar'
 import { useCubeStore } from './store/cubeStore'
 import * as Tabs from '@radix-ui/react-tabs'
-import { Box, Network, Keyboard } from 'lucide-react'
+import { Box, Network, Keyboard, Route } from 'lucide-react'
 import type { MoveName } from './engine/cube'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'split' | 'cube' | 'graph'>('split')
   const currentState = useCubeStore((s) => s.currentState)
   const history = useCubeStore((s) => s.history)
+  const solveResult = useCubeStore((s) => s.solveResult)
   const applyMove = useCubeStore((s) => s.applyMove)
+  const togglePlay = useCubeStore((s) => s.togglePlay)
+  const nextStep = useCubeStore((s) => s.nextStep)
+  const prevStep = useCubeStore((s) => s.prevStep)
   const getActivePreset = useCubeStore((s) => s.getActivePreset)
 
   const activePreset = getActivePreset()
 
-  // Keyboard shortcut listener for swift cube manipulation
+  // Keyboard shortcut listener for swift cube manipulation & playback
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in input
@@ -24,6 +29,26 @@ export default function App() {
         return
       }
 
+      // Spacebar for play/pause
+      if (e.code === 'Space') {
+        e.preventDefault()
+        togglePlay()
+        return
+      }
+
+      // Left/Right arrow for stepping
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        nextStep()
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        prevStep()
+        return
+      }
+
+      // Face turn moves
       const key = e.key.toUpperCase()
       const isShift = e.shiftKey
 
@@ -40,7 +65,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activePreset.generators, applyMove])
+  }, [activePreset.generators, applyMove, togglePlay, nextStep, prevStep])
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-50 text-slate-900 antialiased select-none font-sans">
@@ -53,8 +78,8 @@ export default function App() {
           <div>
             <h1 className="text-base font-semibold tracking-tight text-slate-900 flex items-center gap-2">
               CubeGraph
-              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-mono font-medium">
-                Cayley State Graph
+              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-mono font-medium flex items-center gap-1">
+                <Route className="h-3 w-3" /> State & Path Visualizer
               </span>
             </h1>
           </div>
@@ -83,19 +108,24 @@ export default function App() {
               value="graph"
               className="px-3 py-1 text-xs font-medium rounded-md transition-all data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs text-slate-500 hover:text-slate-800 cursor-pointer"
             >
-              Cayley Graph
+              Graph View
             </Tabs.Trigger>
           </Tabs.List>
         </Tabs.Root>
 
         {/* Keyboard hints badge */}
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100/80 border border-slate-200 px-2.5 py-1 rounded-md">
+        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 bg-slate-100/80 border border-slate-200 px-2.5 py-1 rounded-md">
           <Keyboard className="h-3.5 w-3.5 text-slate-400" />
-          <span>Press <kbd className="font-mono bg-white px-1 border border-slate-200 rounded text-slate-700">R</kbd>, <kbd className="font-mono bg-white px-1 border border-slate-200 rounded text-slate-700">U</kbd> (+Shift for ')</span>
+          <span>
+            <kbd className="font-mono bg-white px-1 border border-slate-200 rounded text-slate-700">Space</kbd> Play
+            {' • '}
+            <kbd className="font-mono bg-white px-1 border border-slate-200 rounded text-slate-700">←</kbd>
+            <kbd className="font-mono bg-white px-1 border border-slate-200 rounded text-slate-700 ml-0.5">→</kbd> Step
+          </span>
         </div>
       </header>
 
-      {/* Interactive Controls Panel */}
+      {/* Primary Action Controls */}
       <ControlsPanel />
 
       {/* Main Workspace Area */}
@@ -109,14 +139,14 @@ export default function App() {
           >
             <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-lg bg-white/95 px-3 py-1.5 text-xs border border-slate-200 shadow-xs text-slate-600 font-medium pointer-events-none">
               <Box className="h-3.5 w-3.5 text-indigo-600" />
-              <span>3D State (Drag to inspect)</span>
+              <span>3D Cube (Drag to orbit, scroll to zoom)</span>
             </div>
 
             <Cube3D state={currentState} />
           </div>
         )}
 
-        {/* Right Side: Cayley Graph Explorer */}
+        {/* Right Side: Graph Visualizer */}
         {(activeTab === 'split' || activeTab === 'graph') && (
           <div
             className={`relative bg-white ${
@@ -128,24 +158,31 @@ export default function App() {
         )}
       </main>
 
+      {/* Solution Playback Bar */}
+      <PlaybackBar />
+
       {/* Bottom Status Bar */}
-      <footer className="flex h-10 items-center justify-between border-t border-slate-200 bg-white px-5 text-xs text-slate-500">
+      <footer className="flex h-9 items-center justify-between border-t border-slate-200 bg-white px-5 text-xs text-slate-500">
         <div className="flex items-center gap-2 truncate max-w-[60%]">
-          <span className="font-medium text-slate-700">History ({history.length}):</span>
+          <span className="font-medium text-slate-700">Moves applied:</span>
           {history.length === 0 ? (
             <span className="italic text-slate-400">None (solved origin)</span>
           ) : (
             <span className="font-mono text-indigo-600 truncate">
-              {history.slice(-10).join(' ')}
-              {history.length > 10 && ' ...'}
+              {history.slice(-12).join(' ')}
+              {history.length > 12 && ' ...'}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-4 text-[11px] text-slate-400">
-          <span>Rubik's Group Cayley Exploration</span>
+        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+          {solveResult && (
+            <span className="text-emerald-700 font-medium font-mono">
+              Solution: {solveResult.path.length} steps {solveResult.isOptimal ? '(Optimal)' : ''}
+            </span>
+          )}
           <span>•</span>
-          <span>React 19 + R3F + XYFlow</span>
+          <span>CubeGraph v0.2.0</span>
         </div>
       </footer>
     </div>
